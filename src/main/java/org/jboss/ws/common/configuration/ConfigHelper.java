@@ -26,6 +26,7 @@ import static org.jboss.ws.common.Messages.MESSAGES;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URISyntaxException;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.HashMap;
@@ -33,6 +34,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.StringTokenizer;
+import java.util.ServiceLoader;
 
 import javax.xml.ws.Binding;
 import javax.xml.ws.BindingProvider;
@@ -55,6 +57,7 @@ import org.jboss.wsf.spi.metadata.config.ConfigMetaDataParser;
 import org.jboss.wsf.spi.metadata.config.ConfigRoot;
 import org.jboss.wsf.spi.metadata.j2ee.serviceref.UnifiedHandlerChainMetaData;
 import org.jboss.wsf.spi.metadata.j2ee.serviceref.UnifiedHandlerMetaData;
+import org.jboss.wsf.spi.security.WildflyClientSecurityConfigProvider;
 
 /**
  * Facility class for setting Client config
@@ -78,17 +81,20 @@ public class ConfigHelper implements ClientConfigurer
    public void setConfigHandlers(BindingProvider port, String configFile, String configName)
    {
       Class<?> clazz = !(port instanceof Dispatch) ? port.getClass() : null;
-      ClientConfig config = readConfig(configFile, configName, clazz);
+      ClientConfig config = readConfig(configFile, configName, clazz, port);
       setupConfigHandlers(port.getBinding(), config);
    }
 
    @Override
    public void setConfigProperties(Object client, String configFile, String configName)
    {
-      throw MESSAGES.operationNotSupportedBy("setConfigProperties", this.getClass());
+      BindingProvider port = (BindingProvider) client;
+      Class<?> clazz = !(port instanceof Dispatch) ? port.getClass() : null;
+      ClientConfig config = readConfig(configFile, configName, clazz, port);
+      port.getRequestContext().putAll(config.getProperties());
    }
-   
-   protected ClientConfig readConfig(String configFile, String configName, Class<?> clientProxyClass) {
+
+   protected ClientConfig readConfig(String configFile, String configName, Class<?> clientProxyClass, BindingProvider port) {
       if (configFile != null) {
          InputStream is = null;
          try
@@ -149,6 +155,15 @@ public class ConfigHelper implements ClientConfigurer
                   try {
                      is.close();
                   } catch (IOException e) { } //ignore
+               }
+            }
+         } else {
+            ServiceLoader<WildflyClientSecurityConfigProvider> loader = ServiceLoader.load(WildflyClientSecurityConfigProvider.class);
+            if (loader.iterator().hasNext()) {
+               try {
+                  return WildflyClientConfigHelper.getConfiguredClient(loader.iterator().next(), port);
+               } catch (URISyntaxException e) {
+                  throw MESSAGES.couldNotReadConfigFile("wildfly-config.xml");
                }
             }
          }
