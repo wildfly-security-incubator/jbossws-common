@@ -26,7 +26,6 @@ import static org.jboss.ws.common.Messages.MESSAGES;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URISyntaxException;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.HashMap;
@@ -81,20 +80,17 @@ public class ConfigHelper implements ClientConfigurer
    public void setConfigHandlers(BindingProvider port, String configFile, String configName)
    {
       Class<?> clazz = !(port instanceof Dispatch) ? port.getClass() : null;
-      ClientConfig config = readConfig(configFile, configName, clazz, port);
+      ClientConfig config = readConfig(configFile, configName, clazz);
       setupConfigHandlers(port.getBinding(), config);
    }
 
    @Override
    public void setConfigProperties(Object client, String configFile, String configName)
    {
-      BindingProvider port = (BindingProvider) client;
-      Class<?> clazz = !(port instanceof Dispatch) ? port.getClass() : null;
-      ClientConfig config = readConfig(configFile, configName, clazz, port);
-      port.getRequestContext().putAll(config.getProperties());
+      throw MESSAGES.operationNotSupportedBy("setConfigProperties", this.getClass());
    }
 
-   protected ClientConfig readConfig(String configFile, String configName, Class<?> clientProxyClass, BindingProvider port) {
+   protected ClientConfig readConfig(String configFile, String configName, Class<?> clientProxyClass) {
       if (configFile != null) {
          InputStream is = null;
          try
@@ -157,15 +153,9 @@ public class ConfigHelper implements ClientConfigurer
                   } catch (IOException e) { } //ignore
                }
             }
-         } else {
-            ServiceLoader<WildflyClientSecurityConfigProvider> loader = ServiceLoader.load(WildflyClientSecurityConfigProvider.class);
-            if (loader.iterator().hasNext()) {
-               try {
-                  return WildflyClientConfigHelper.getConfiguredClient(loader.iterator().next(), port);
-               } catch (URISyntaxException e) {
-                  throw MESSAGES.couldNotReadConfigFile("wildfly-config.xml");
-               }
-            }
+         } else if (ServiceLoader.load(WildflyClientSecurityConfigProvider.class).iterator().hasNext()){
+            // pass the responsibility of config creation
+            return null;
          }
          try {
             ServerConfig sc = getServerConfig();
